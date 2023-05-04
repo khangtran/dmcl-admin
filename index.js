@@ -6,12 +6,15 @@ const users = [];
 const io = require('socket.io')(server,{
 	cors:{origin:"*"}
 });
-const router = express.Router()
-
+const router = express.Router();
+const PORT = 3000;
 
 
 io.on('connection',function(socket)
 {
+
+	console.log('socket.connected', socket.id);
+
 	socket.on('user_connected',function(user_id,name_user,store,time_login){
 		var player = {
 		    id: socket.id,
@@ -23,7 +26,7 @@ io.on('connection',function(socket)
 
 		users.push(player);
 		io.emit('getalluserclient',users);
-		console.log(`online ${user_id}`);
+		console.log(`user.online ${user_id}`, player);
 	});
 
 
@@ -48,6 +51,6 @@ io.on('connection',function(socket)
 	});
 });
 
-server.listen(3000,() =>{
-	console.log('Server is running');
+server.listen(PORT,() =>{
+	console.log(`Server is running ${PORT}`);
 });
