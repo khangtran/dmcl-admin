@@ -29,10 +29,9 @@ io.on('connection',function(socket)
 		console.log(`user.online ${user_id}`, player);
 	});
 
-
 	socket.on('getalluser',function(){
 		io.emit('getalluserclient',users);
-		console.log(`all`);
+		console.log(`user.all`, users.length);
 	});
 
 	socket.on('user_disconnected',function(id_socket){
