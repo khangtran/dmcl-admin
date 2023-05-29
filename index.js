@@ -1,5 +1,6 @@
 const express = require('express');
-const axios = require('axios')
+const axios = require('axios');
+const { log } = require('console');
 const app = express();
 const server = require('http').createServer(app);
 const users = [];
@@ -14,7 +15,9 @@ io.on('connection', function (socket) {
 
 	console.log('socket.connected', socket.id);
 
-	socket.on('user_connected', function (user_id, name_user, store, time_login) {
+	socket.on('user_connected', function (data) {
+
+		var { user_id, name_user, store, time_login } = data;
 		var player = {
 			id: socket.id,
 			user_id: user_id,
@@ -54,7 +57,15 @@ io.on('connection', function (socket) {
 
 	socket.on('send-noti', function (data) {
 		var { toId, fromId, message, title, level, group, } = data;
-		io.emit('send-noti');
+		var userIndex = users.findIndex(e => e.user_id == toId);
+		if (userIndex = !-1) {
+			var userSocketId = users[userIndex].id;
+			io.to(userSocketId).emit('send-noti');
+		}
+		else {
+			console.log('not found user ', toId);
+		}
+
 	});
 
 	socket.on('disconnect', function () {
