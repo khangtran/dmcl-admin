@@ -1,15 +1,20 @@
 const express = require('express');
 const axios = require('axios');
-const { log } = require('console');
+// const { log, group, time } = require('console');
+// const { message } = require('laravel-mix/src/Log');
+const bodyParser = require('body-parser');
 const app = express();
 const server = require('http').createServer(app);
-const users = [];
 const io = require('socket.io')(server, {
 	cors: { origin: "*" }
 });
-const router = express.Router();
 const PORT = 3000;
+app.use(bodyParser.json());
+// app.use(cors())
 
+const users = [];
+const groups = [];
+const seenNotfiWebhook = '';
 
 io.on('connection', function (socket) {
 
@@ -17,18 +22,32 @@ io.on('connection', function (socket) {
 
 	socket.on('user_connected', function (data) {
 
-		var { user_id, name_user, store, time_login } = data;
+		var { user_id, name_user, store, time_login, group } = data;
 		var player = {
 			id: socket.id,
 			user_id: user_id,
 			name_user: name_user,
 			store: store,
 			time_login: time_login,
+			group: group
 		};
 
 		users.push(player);
 		io.emit('getalluserclient', users);
 		console.log(`user.online ${user_id}`, player);
+
+		if (group != null || group != undefined)
+			for (var i in group) {
+
+				socket.join(i)
+				var index = groups.findIndex(e => e == i);
+				if (index != -1) {
+
+					groups.push(i)
+					console.log(`> group.registerNewGroup ${i}`)
+				}
+			}
+
 	});
 
 	socket.on('getalluser', function () {
@@ -55,8 +74,9 @@ io.on('connection', function (socket) {
 		console.log(`user.ban disconnected ${id_socket}`);
 	});
 
-	socket.on('send-noti', function (data) {
+	socket.on('send-notifi', function (data) {
 		var { toId, fromId, message, title, level, group, } = data;
+
 		var userIndex = users.findIndex(e => e.user_id == toId);
 		if (userIndex = !-1) {
 			var userSocketId = users[userIndex].id;
@@ -65,8 +85,13 @@ io.on('connection', function (socket) {
 		else {
 			console.log('not found user ', toId);
 		}
-
 	});
+
+	socket.on('seen-notifi', function (data) {
+		var { userId, timeSeen } = data;
+		var url = `seenNotfiWebhook?userId=${userId}&timeseen=${timeSeen}`
+		fetch(url);
+	})
 
 	socket.on('disconnect', function () {
 		var index = users.findIndex(elem => elem.id === socket.id);
@@ -78,6 +103,71 @@ io.on('connection', function (socket) {
 	});
 });
 
+// api
+app.get('/api/v1', function (req, res) {
+	var response = ResponseData.success({
+		data: {
+			api: 'ĐMCL API Socket.io',
+			version: 'v1', schema: [{
+				url: '/api/v1/pushnotifi',
+				method: 'get',
+				arg: { message: 'string', title: 'string', level: 'string', group: 'array<string>', fromId: 'string', extradata: 'jsonoject' }
+			}, { url: '/api/v1/getallgroup', method: 'get', arg: {}, response: { type: 'array<string>' } }]
+		}
+	})
+	res.json(response);
+});
+
+app.post('/api/v1/pushnotifi', function (req, res) {
+	var param = req.body;
+	var { groups } = req.body;
+	var response = ResponseData.success({ data: { notificationId: 1000, param: param } });
+
+	if (groups != null)
+		for (var i in groups)
+			io.to(i).emit('send-notifi', param)
+	else
+		response = ResponseData.error({ message: 'groups not found', data: null })
+
+	res.json(response)
+})
+
+app.get('/api/v1/getallgroup', function (req, res) {
+	var response = ResponseData.success({ data: groups })
+	res.json(response)
+})
+
+app.post('/api/v1/setWebhook', function (req, res) {
+	var { url_webhook } = req.body
+	var response = ResponseData.success({ data: url_webhook });
+	res.json(response);
+})
+
 server.listen(PORT, () => {
 	console.log(`Server is running ${PORT}`);
 });
+
+
+// function ResponseData(isError, message, data) {
+// 	return {
+// 		isError: isError, message: message, data: data
+// 	}
+// }
+
+
+class ResponseData {
+
+	constructor(isError, message, data) {
+		this.isError = isError
+		this.message = message
+		this.data = data
+	}
+
+	static success({ message = 'success', data }) {
+		return new ResponseData(true, message, data);
+	}
+
+	static error({ message = 'fail', data }) {
+		return new ResponseData(false, message, data);
+	}
+}
