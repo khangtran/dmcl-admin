@@ -3,6 +3,7 @@ const axios = require('axios');
 // const { log, group, time } = require('console');
 // const { message } = require('laravel-mix/src/Log');
 const bodyParser = require('body-parser');
+const { group } = require('console');
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server, {
@@ -40,11 +41,13 @@ io.on('connection', function (socket) {
 			for (var i in group) {
 
 				socket.join(i)
+				console.log(`> user.registerGroup ${i}`)
+
 				var index = groups.findIndex(e => e == i);
 				if (index != -1) {
 
 					groups.push(i)
-					console.log(`> group.registerNewGroup ${i}`)
+					console.log(`> group.registerNew ${i}`)
 				}
 			}
 
@@ -120,14 +123,27 @@ app.get('/api/v1', function (req, res) {
 
 app.post('/api/v1/pushnotifi', function (req, res) {
 	var param = req.body;
-	var { groups } = req.body;
+	var userResquestGroups = param.groups;
 	var response = ResponseData.success({ data: { notificationId: 1000, param: param } });
 
-	if (groups != null)
+	if (userResquestGroups != null) {
+		var isMatchGroups = true;
+		for (var i in groups)
+			for (var j in userResquestGroups) {
+				if (i != j)
+					isMatchGroups = false;
+			}
+
+		if (!isMatchGroups) {
+			response = ResponseData.error({ message: 'wrong group register', data: null });
+			res.json(response);
+		}
+
 		for (var i in groups)
 			io.to(i).emit('send-notifi', param)
+	}
 	else
-		response = ResponseData.error({ message: 'groups not found', data: null })
+		response = ResponseData.error({ message: 'groups empty', data: null })
 
 	res.json(response)
 })
@@ -137,7 +153,7 @@ app.get('/api/v1/getallgroup', function (req, res) {
 	res.json(response)
 })
 
-app.post('/api/v1/setWebhook', function (req, res) {
+app.post('/api/v1/setwebhook', function (req, res) {
 	var { url_webhook } = req.body
 	var response = ResponseData.success({ data: url_webhook });
 	res.json(response);
