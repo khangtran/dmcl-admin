@@ -60,19 +60,22 @@ io.on('connection', function (socket) {
 
 	socket.on('user_disconnected', function (id_socket) {
 
-		io.to(id_socket).emit('disconnect_user', users);
+		io.to(id_socket).emit('disconnect_user', id_socket);
+
 		io.emit('getalluserclient', users);
 		console.log(`disconnected ${id_socket}`);
 	});
 
 	socket.on('user_kick', function (id_socket) {
-		io.to(id_socket).emit('disconnect_user', users);
+		io.to(id_socket).emit('disconnect_user', id_socket);
+
 		io.emit('getalluserclient', users);
 		console.log(`user.kick disconnected ${id_socket}`);
 	});
 
 	socket.on('user_ban', function (id_socket) {
-		io.to(id_socket).emit('disconnect_user', users);
+		io.to(id_socket).emit('disconnect_user', id_socket);
+
 		io.emit('getalluserclient', users);
 		console.log(`user.ban disconnected ${id_socket}`);
 	});
