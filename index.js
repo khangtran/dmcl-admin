@@ -4,18 +4,26 @@ const axios = require('axios');
 // const { message } = require('laravel-mix/src/Log');
 const bodyParser = require('body-parser');
 const { group } = require('console');
+const { stat } = require('fs');
+const { env } = require('process');
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server, {
 	cors: { origin: "*" }
 });
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 // app.use(cors())
 
 const users = [];
+const users_block = [];
 const groups = [];
 const seenNotfiWebhook = '';
+
+
+const USER_BLOCK_MESSAGE = 'Quản lý đã khóa tài khoản của bạn. Để tiếp tục, bạn vui lòng liên hệ quản lý để khắc phục.'
+const USER_ALREADY_CONNECT = 'Tài khoản đã kết nối.'
+
 
 io.on('connection', function (socket) {
 
@@ -24,7 +32,7 @@ io.on('connection', function (socket) {
 	socket.on('user_connected', function (data) {
 
 		var { user_id, name_user, store, time_login, group } = data;
-		var player = {
+		var user = {
 			id: socket.id,
 			user_id: user_id,
 			name_user: name_user,
@@ -33,9 +41,24 @@ io.on('connection', function (socket) {
 			group: group
 		};
 
-		users.push(player);
-		io.emit('getalluserclient', users);
-		console.log(`user.online ${user_id}`, player);
+		if (searchUserWith(user.user_id, { property_match: 'user_id', default_list: users_block }) != null) {
+			console.log('Account blocked.');
+
+			socket.emit('user_connected_response', { 'isConnected': false, 'reason': USER_BLOCK_MESSAGE });
+			return;
+		}
+
+		if (searchUserWith(user.user_id, { property_match: 'user_id', default_list: users }) != null) {
+			console.log('User already connected.');
+
+			socket.emit('user_connected_response', { 'isConnected': false, 'reason': USER_ALREADY_CONNECT });
+			return;
+		}
+
+		users.push(user);
+		io.emit('getalluserclient', userGroupBySite(user.store));
+		console.log(`user.online ${user_id}`, user);
+		socket.emit('user_connected_response', { 'isConnected': true, 'reason': 'Permission allow' })
 
 		if (group != null || group != undefined)
 			for (var i in group) {
@@ -73,13 +96,6 @@ io.on('connection', function (socket) {
 		console.log(`user.kick disconnected ${id_socket}`);
 	});
 
-	socket.on('user_ban', function (id_socket) {
-		io.to(id_socket).emit('disconnect_user', id_socket);
-
-		io.emit('getalluserclient', users);
-		console.log(`user.ban disconnected ${id_socket}`);
-	});
-
 	socket.on('send-notifi', function (data) {
 		var { toId, fromId, message, title, level, group, } = data;
 
@@ -101,11 +117,17 @@ io.on('connection', function (socket) {
 
 	socket.on('disconnect', function () {
 		var index = users.findIndex(elem => elem.id === socket.id);
-		if (index != -1)
-			users.splice(index, 1);
 
-		io.emit('getalluserclient', users);
-		console.log("User disconnect");
+		if (index != -1) {
+			io.emit('getalluserclient', userGroupBySite(users[index]['store']));
+
+			users.splice(index, 1);
+			console.log("User disconnect");
+
+		} else {
+			console.log("Not found", socket.id)
+		}
+
 	});
 });
 
@@ -122,6 +144,49 @@ app.get('/api/v1', function (req, res) {
 		}
 	})
 	res.json(response);
+});
+
+app.get('/api/v1/getListUserBlock', function (req, res) {
+
+	if (req.headers['token'] == undefined || req.headers['token'].length < 6) {
+		res.json(new ResponseData(true, 'Thiếu token hoặc token không hợp lệ', null))
+		return;
+	}
+
+	var response = new ResponseData(false, 'success', users_block);
+
+	return res.json(response);
+});
+
+app.post('/api/v1/kickUser', function (req, res) {
+
+	var { userId } = req.body;
+	if (req.headers['token'] == undefined || req.headers['token'].length < 12) {
+		res.json(ResponseData.error({ message: 'Thiếu token hoặc token không hợp lệ', data: null }))
+		return;
+	}
+
+	console.log('>> request.kickUser', userId)
+	var response = new ResponseData(false, 'success', null)
+	var user = searchUserWith(userId, { property_match: 'user_id', default_list: users });
+	if (user != null) {
+		return res.json(response);
+	}
+
+
+	return res.json(ResponseData.error({ message: 'userId not found ', data: null }));
+})
+
+app.post('/api/v1/blockUser', function (req, res) {
+	var { userId, status } = req.body;
+	req.headers.authorization
+	if (req.headers['token'] == undefined || req.headers['token'].length < 12) {
+		res.json(new ResponseData(true, 'Thiếu token hoặc token không hợp lệ', null))
+		return;
+	}
+	console.log('>> request.blockUser', userId, status)
+	var response = blockUser(userId, status);
+	return res.json(response);
 });
 
 app.post('/api/v1/pushnotifi', function (req, res) {
@@ -173,13 +238,62 @@ server.listen(PORT, () => {
 // 	}
 // }
 
+function searchUserWith(property, { property_match = 'id', default_list = users } = {}) {
+
+	var index = default_list.findIndex(e => e[`${property_match}`] == property)
+	if (index == -1)
+		return null;
+	return default_list[index];
+}
+
+function disconnectUser(userId) {
+
+}
+
+
+function userGroupBySite(siteID) {
+	var userGroupBySite = users.filter(e => e['store'] == siteID);
+	return userGroupBySite;
+}
+
+
+function blockUser(userId, status) {
+
+
+	// Nếu trạng thái = true, block user thì list_search là danh sách users
+	// Ngược lại là bỏ block user, thì list_search sẽ là danh sách users_block
+	console.log('>> blockUser', userId, status)
+	console.log('>> list use is', status ? 'users' : 'users_block')
+
+	var user = searchUserWith(userId, { property_match: 'user_id', default_list: status ? users : users_block });
+	if (user != null) {
+		if (status) {
+			users.splice(users.indexOf(user), 1);
+			users_block.push(user);
+
+			io.to(user.id).emit('disconnect_user', { 'reason': USER_BLOCK_MESSAGE })
+			console.log('>> disconnect_user client')
+
+		}
+		else {
+			// users.splice(users.indexOf(user), 1);
+			users_block.splice(users_block.indexOf(user), 1);
+			console.log('> unblocked user')
+			console.log('> users_block.length', users_block.length)
+		}
+		return new ResponseData(false, (status ? 'block ' : 'unblock ').concat('success'), null);
+	}
+	else if (user == null) {
+		return new ResponseData(false, 'User not found', null);
+	}
+}
 
 class ResponseData {
 
 	constructor(isError, message, data) {
 		this.isError = isError
 		this.message = message
-		this.data = data
+		this.data = data == undefined ? null : data
 	}
 
 	static success({ message = 'success', data }) {
