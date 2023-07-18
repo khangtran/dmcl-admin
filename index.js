@@ -1,9 +1,8 @@
 const express = require('express');
+var cors = require('cors');
 const axios = require('axios');
-// const { log, group, time } = require('console');
-// const { message } = require('laravel-mix/src/Log');
 const bodyParser = require('body-parser');
-const { group } = require('console');
+const { group, log } = require('console');
 const { stat } = require('fs');
 const { env } = require('process');
 const app = express();
@@ -13,7 +12,7 @@ const io = require('socket.io')(server, {
 });
 const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
-// app.use(cors())
+app.use(cors())
 
 const users = [];
 const users_block = [];
@@ -146,22 +145,11 @@ app.get('/api/v1', function (req, res) {
 	res.json(response);
 });
 
-app.get('/api/v1/getListUserBlock', function (req, res) {
-
-	if (req.headers['token'] == undefined || req.headers['token'].length < 6) {
-		res.json(new ResponseData(true, 'Thiếu token hoặc token không hợp lệ', null))
-		return;
-	}
-
-	var response = new ResponseData(false, 'success', users_block);
-
-	return res.json(response);
-});
 
 app.post('/api/v1/kickUser', function (req, res) {
 
 	var { userId } = req.body;
-	if (req.headers['token'] == undefined || req.headers['token'].length < 12) {
+	if (!isAuthen(req)) {
 		res.json(ResponseData.error({ message: 'Thiếu token hoặc token không hợp lệ', data: null }))
 		return;
 	}
@@ -179,14 +167,22 @@ app.post('/api/v1/kickUser', function (req, res) {
 
 app.post('/api/v1/blockUser', function (req, res) {
 	var { userId, status } = req.body;
-	req.headers.authorization
-	if (req.headers['token'] == undefined || req.headers['token'].length < 12) {
+	if (!isAuthen(req)) {
 		res.json(new ResponseData(true, 'Thiếu token hoặc token không hợp lệ', null))
 		return;
 	}
 	console.log('>> request.blockUser', userId, status)
 	var response = blockUser(userId, status);
 	return res.json(response);
+});
+
+app.get('/api/v1/getListUserBlock', function (req, res) {
+	if (!isAuthen(req)) {
+		res.json(new ResponseData(true, 'Thiếu token hoặc token không hợp lệ', null))
+		return;
+	}
+	var data = ResponseData.success({ message: 'success', data: users_block });
+	res.json(data);
 });
 
 app.post('/api/v1/pushnotifi', function (req, res) {
@@ -286,6 +282,13 @@ function blockUser(userId, status) {
 	else if (user == null) {
 		return new ResponseData(false, 'User not found', null);
 	}
+}
+
+function isAuthen(req) {
+	if (req.headers['token'] == undefined || req.headers['token'].length < 12) {
+		return false;
+	}
+	return true;
 }
 
 class ResponseData {
