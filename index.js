@@ -14,15 +14,20 @@ const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(cors())
 
+const users_hr = [];
 const users = [];
 const users_block = [];
 const groups = [];
 const seenNotfiWebhook = '';
 
 
-const USER_BLOCK_MESSAGE = 'Quản lý đã khóa tài khoản của bạn. Để tiếp tục, bạn vui lòng liên hệ quản lý để khắc phục.'
+const USER_CONNECT_SUCCESS = 'Tài khoản kết nối thành công.';
+const USER_HAS_BEEN_BLOCK = 'Quản lý đã khóa tài khoản của bạn. Để tiếp tục, bạn vui lòng liên hệ quản lý để khắc phục.'
 const USER_ALREADY_CONNECT = 'Tài khoản đã kết nối.'
 
+//
+// socket
+//
 
 io.on('connection', function (socket) {
 
@@ -30,24 +35,31 @@ io.on('connection', function (socket) {
 
 	socket.on('user_connected', function (data) {
 
-		var { user_id, name_user, store, time_login, group } = data;
+		var { user_id, name_user, store, time_login, group, cid_level } = data;
 		var user = {
 			id: socket.id,
 			user_id: user_id,
 			name_user: name_user,
 			store: store,
 			time_login: time_login,
-			group: group
+			group: group,
+			cid_level: cid_level,
+			platform: ''
 		};
 
-		if (searchUserWith(user.user_id, { property_match: 'user_id', default_list: users_block }) != null) {
+		var isHRManager = false;
+		if (user.cid_level == 25 || user.cid_level == 0) {
+			isHRManager = true;
+		}
+
+		if (!isHRManager && searchUserWith(user.user_id, { property_match: 'user_id', default_list: users_block }) != null) {
 			console.log('Account blocked.');
 
-			socket.emit('user_connected_response', { 'isConnected': false, 'reason': USER_BLOCK_MESSAGE });
+			socket.emit('user_connected_response', { 'isConnected': false, 'reason': USER_HAS_BEEN_BLOCK });
 			return;
 		}
 
-		if (searchUserWith(user.user_id, { property_match: 'user_id', default_list: users }) != null) {
+		if (!isHRManager && searchUserWith(user.user_id, { property_match: 'user_id', default_list: users }) != null) {
 			console.log('User already connected.');
 
 			socket.emit('user_connected_response', { 'isConnected': false, 'reason': USER_ALREADY_CONNECT });
@@ -57,7 +69,7 @@ io.on('connection', function (socket) {
 		users.push(user);
 		io.emit('getalluserclient', userGroupBySite(user.store));
 		console.log(`user.online ${user_id}`, user);
-		socket.emit('user_connected_response', { 'isConnected': true, 'reason': 'Permission allow' })
+		socket.emit('user_connected_response', { 'isConnected': true, 'reason': USER_CONNECT_SUCCESS })
 
 		if (group != null || group != undefined)
 			for (var i in group) {
@@ -118,19 +130,20 @@ io.on('connection', function (socket) {
 		var index = users.findIndex(elem => elem.id === socket.id);
 
 		if (index != -1) {
-			io.emit('getalluserclient', userGroupBySite(users[index]['store']));
-
 			users.splice(index, 1);
-			console.log("User disconnect");
 
-		} else {
-			console.log("Not found", socket.id)
+			io.emit('getalluserclient', userGroupBySite(users[index]['store']));
+			console.log("disconnect.success");
+
 		}
 
+		console.log("disconnect", socket.id)
 	});
 });
 
+//
 // api
+//
 app.get('/api/v1', function (req, res) {
 	var response = ResponseData.success({
 		data: {
@@ -227,16 +240,15 @@ server.listen(PORT, () => {
 	console.log(`Server is running ${PORT}`);
 });
 
+///
+/// function helper
+///
 
-// function ResponseData(isError, message, data) {
-// 	return {
-// 		isError: isError, message: message, data: data
-// 	}
-// }
 
-function searchUserWith(property, { property_match = 'id', default_list = users } = {}) {
 
-	var index = default_list.findIndex(e => e[`${property_match}`] == property)
+function searchUserWith(property_actual, { property_match = 'id', default_list = users } = {}) {
+
+	var index = default_list.findIndex(e => e[`${property_match}`] == property_actual)
 	if (index == -1)
 		return null;
 	return default_list[index];
@@ -248,7 +260,11 @@ function disconnectUser(userId) {
 
 
 function userGroupBySite(siteID) {
-	var userGroupBySite = users.filter(e => e['store'] == siteID);
+
+	var userGroupBySite = users;
+	if (siteID != 'H001')
+		userGroupBySite = users.filter(e => e['store'] == siteID);
+
 	return userGroupBySite;
 }
 
@@ -258,17 +274,18 @@ function blockUser(userId, status) {
 
 	// Nếu trạng thái = true, block user thì list_search là danh sách users
 	// Ngược lại là bỏ block user, thì list_search sẽ là danh sách users_block
-	console.log('>> blockUser', userId, status)
-	console.log('>> list use is', status ? 'users' : 'users_block')
+	console.log('>> list use is:', status ? 'users' : 'users_block')
 
 	var user = searchUserWith(userId, { property_match: 'user_id', default_list: status ? users : users_block });
+	console.log('>> blockUser', userId, status, 'result: ', user)
+
 	if (user != null) {
 		if (status) {
 			users.splice(users.indexOf(user), 1);
 			users_block.push(user);
 
-			io.to(user.id).emit('disconnect_user', { 'reason': USER_BLOCK_MESSAGE })
-			console.log('>> disconnect_user client')
+			io.to(user.id).emit('disconnect_user', { 'reason': USER_HAS_BEEN_BLOCK })
+			console.log('>> disconnect_user client', user)
 
 		}
 		else {
@@ -277,6 +294,9 @@ function blockUser(userId, status) {
 			console.log('> unblocked user')
 			console.log('> users_block.length', users_block.length)
 		}
+		console.log("getalluserclient", userGroupBySite(user.store))
+		io.emit('getalluserclient', userGroupBySite(user.store));
+
 		return new ResponseData(false, (status ? 'block ' : 'unblock ').concat('success'), null);
 	}
 	else if (user == null) {
