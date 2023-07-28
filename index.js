@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const { group, log } = require('console');
 const { stat } = require('fs');
 const { env } = require('process');
+const { list } = require('postcss');
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server, {
@@ -25,6 +26,8 @@ const USER_CONNECT_SUCCESS = 'Tài khoản kết nối thành công.';
 const USER_HAS_BEEN_BLOCK = 'Quản lý đã khóa tài khoản của bạn. Để tiếp tục, bạn vui lòng liên hệ quản lý để khắc phục.'
 const USER_ALREADY_CONNECT = 'Tài khoản đã kết nối.'
 
+
+const GroupManagerHR = 'HRManager'
 //
 // socket
 //
@@ -50,6 +53,8 @@ io.on('connection', function (socket) {
 		var isHRManager = false;
 		if (user.cid_level == 25 || user.cid_level == 0) {
 			isHRManager = true;
+			users_hr.push(user);
+			socket.join(GroupManagerHR);
 		}
 
 		if (!isHRManager && searchUserWith(user.user_id, { property_match: 'user_id', default_list: users_block }) != null) {
@@ -67,7 +72,12 @@ io.on('connection', function (socket) {
 		}
 
 		users.push(user);
-		io.emit('getalluserclient', userGroupBySite(user.store));
+		// io.emit('getalluserclient', userGroupBySite(user.store));
+
+		var userHR = findUserHR(user.store);
+		if (userHR != null)
+			io.to(userHR.id).emit('getalluserclient', userGroupBySite(user.store));
+
 		console.log(`user.online ${user_id}`, user);
 		socket.emit('user_connected_response', { 'isConnected': true, 'reason': USER_CONNECT_SUCCESS })
 
@@ -128,13 +138,23 @@ io.on('connection', function (socket) {
 
 	socket.on('disconnect', function () {
 		var index = users.findIndex(elem => elem.id === socket.id);
+		var store = users[index].store;
 
 		if (index != -1) {
 			users.splice(index, 1);
 
-			io.emit('getalluserclient', userGroupBySite(users[index]['store']));
-			console.log("disconnect.success");
+			var indexHR = users_hr.findIndex(e => e.store == list[index].store)
+			if (indexHR != -1) {
+				var userHR = users_hr[indexHR];
+				var usersFilter = userGroupBySite(userHR.store);
+				io.emit('getalluserclient', usersFilter)
+				console.log(`io.emit.getalluserclient ${userHR}: ${usersFilter}`);
+			}
+			else
+				console.log(`Không tìm thấy HR của CN ${store} online`);
 
+			// io.to(GroupManagerHR).emit('getalluserclient', userGroupBySite(users[index].store));
+			console.log("disconnect.success");
 		}
 
 		console.log("disconnect", socket.id)
@@ -309,6 +329,15 @@ function isAuthen(req) {
 		return false;
 	}
 	return true;
+}
+
+function findUserHR(siteID) {
+	var index = users_hr.findIndex(e => e.store == siteID);
+	if (index == -1) {
+		console.log(`Không tìm thấy HR CN ${siteID} online`);
+		return null;
+	}
+	return users_hr[index];
 }
 
 class ResponseData {
