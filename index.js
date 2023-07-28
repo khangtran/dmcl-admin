@@ -141,12 +141,11 @@ io.on('connection', function (socket) {
 
 		if (index != -1) {
 			var store = users[index].store;
-
 			users.splice(index, 1);
 
-			var indexHR = users_hr.findIndex(e => e.store == list[index].store)
-			if (indexHR != -1) {
-				var userHR = users_hr[indexHR];
+			var userHR = findUserHR(store);
+
+			if (userHR != null) {
 				var usersFilter = userGroupBySite(userHR.store);
 				io.emit('getalluserclient', usersFilter)
 				console.log(`io.emit.getalluserclient ${userHR}: ${usersFilter}`);
@@ -335,7 +334,6 @@ function isAuthen(req) {
 function findUserHR(siteID) {
 	var index = users_hr.findIndex(e => e.store == siteID);
 	if (index == -1) {
-		console.log(`Không tìm thấy HR CN ${siteID} online`);
 		return null;
 	}
 	return users_hr[index];
