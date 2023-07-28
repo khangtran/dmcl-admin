@@ -78,7 +78,7 @@ io.on('connection', function (socket) {
 		if (userHR != null)
 			io.to(userHR.id).emit('getalluserclient', userGroupBySite(user.store));
 
-		console.log(`user.online ${user_id}`, user);
+		console.log(`user.online ${user_id == null ? name_user : user_id}`, user);
 		socket.emit('user_connected_response', { 'isConnected': true, 'reason': USER_CONNECT_SUCCESS })
 
 		if (group != null || group != undefined)
@@ -138,9 +138,10 @@ io.on('connection', function (socket) {
 
 	socket.on('disconnect', function () {
 		var index = users.findIndex(elem => elem.id === socket.id);
-		var store = users[index].store;
 
 		if (index != -1) {
+			var store = users[index].store;
+
 			users.splice(index, 1);
 
 			var indexHR = users_hr.findIndex(e => e.store == list[index].store)
