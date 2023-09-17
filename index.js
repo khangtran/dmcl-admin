@@ -1,11 +1,11 @@
 const express = require('express');
-var cors = require('cors');
+const cors = require('cors');
 const axios = require('axios');
 const bodyParser = require('body-parser');
+const fs = require('fs')
 const { group, log } = require('console');
-const { stat } = require('fs');
 const { env } = require('process');
-const { list } = require('postcss');
+const apiMobilleadmin = require('./api-mobilleadmin');
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server, {
@@ -20,7 +20,6 @@ const users = [];
 const users_block = [];
 const groups = [];
 const seenNotfiWebhook = '';
-
 
 const USER_CONNECT_SUCCESS = 'Tài khoản kết nối thành công.';
 const USER_HAS_BEEN_BLOCK = 'Quản lý đã khóa tài khoản của bạn. Để tiếp tục, bạn vui lòng liên hệ quản lý để khắc phục.'
@@ -177,6 +176,73 @@ app.get('/api/v1', function (req, res) {
 	})
 	res.json(response);
 });
+
+apiMobilleadmin(app);
+
+// app.post('/api/v1/newupdate', function (req, res) {
+// 	var { package, version, link } = req.body;
+// 	var newPackage = { package: package, version: version, link: link };
+
+// 	var rawData = fs.readFileSync('appUpdateDatabase.json');
+// 	var appUpdate = JSON.parse(rawData);
+// 	if (appUpdate == null) appUpdate = [];
+
+// 	console.log(`appUpdate`, appUpdate)
+
+// 	// case modifile if exits
+// 	var appPackage = null
+
+// 	// for(var i =0;i< appUpdate.length;i++)
+// 	// console.log(appUpdate)
+	
+// 	for (var i = 0; i < appUpdate.length; i++) {
+
+// 		console.log(appUpdate[i].package, package)
+// 		if (appUpdate[i].package == package) {
+// 			console.log(`modifile package ${appPackage}`);
+// 			appUpdate[i] = newPackage;
+// 			appPackage = newPackage;
+// 			return;
+// 		}
+// 	}
+
+// 	// case not found, add new
+// 	if (appPackage == null) {
+// 		appPackage = newPackage;
+// 		appUpdate.push(newPackage)
+// 		console.log(`add package`, newPackage);
+// 	}
+
+// 	var raw = JSON.stringify(appUpdate);
+// 	fs.writeFileSync('appUpdateDatabase.json', raw);
+
+// 	console.log(`writte done`);
+
+// 	return res.json({ message: 'success', data: appUpdate })
+// })
+
+// app.get('/api/v1/getupdate', function (req, res) {
+
+// 	var { package, } = req.query;
+
+// 	console.log('query', package)
+
+// 	var rawData = fs.readFileSync('appUpdateDatabase.json');
+// 	var appUpdate = JSON.parse(rawData)
+
+// 	if (package == null)
+// 		return res.json({ message: 'success', data: appUpdate })
+
+
+// 	var appPackage = null
+// 	for (var i = 0; i < appUpdate.length; i++)
+// 		if (package == appUpdate[i].package) {
+// 			appPackage = appUpdate[i];
+// 			break;
+// 		}
+
+// 	return res.json({ message: 'success', data: appPackage })
+// })
 
 
 app.post('/api/v1/kickUser', function (req, res) {
